@@ -27,7 +27,7 @@ jobs:
       # Sent to CertOne and scanned in an AMD SEV-SNP confidential VM: static analysis, tests on the
       # target, metrics. The job fails unless the verdict passes.
       - name: CertOne confidential scan
-        uses: admin-certkorai/certone-action@v1
+        uses: certkorai/certone-action@v1
         with:
           api-key: ${{ secrets.CERTONE_API_KEY }}
           path: ${{ matrix.path }}
