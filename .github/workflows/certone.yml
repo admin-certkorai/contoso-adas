@@ -38,7 +38,7 @@ jobs:
 
       - name: Show the findings in code scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: certone.sarif
           category: certone-${{ matrix.path }}
