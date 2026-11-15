@@ -54,7 +54,7 @@ SIGN_CLASSES = {"traffic light", "stop sign"}
 ADAS_CLASSES = VRU_CLASSES | VEHICLE_CLASSES | SIGN_CLASSES
 
 # Detection confidence gate for the safety pipeline.
-CONF_THRESHOLD = 0.30
+CONF_THRESHOLD = 0.25  # lower: more pedestrians and cyclists kept at night
 
 
 @dataclass
