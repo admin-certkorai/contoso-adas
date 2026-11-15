@@ -1,0 +1,3 @@
+# Host-side tooling ONLY (trainer + int8 codegen). The ECU firmware itself is
+# pure C with NO Python and NO third-party libraries (bare gcc + libm).
+numpy==2.1.3

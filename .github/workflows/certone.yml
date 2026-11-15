@@ -1,0 +1,46 @@
+name: CertOne compliance gate
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certone:
+    name: CertOne · ${{ matrix.asset }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - path: adas-ecu-driver-monitor
+            asset: ADAS ECU Driver Monitor
+          - path: adas-perception
+            asset: ADAS Forward Perception
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sent to CertOne and scanned in an AMD SEV-SNP confidential VM: static analysis, tests on the
+      # target, metrics. The job fails unless the verdict passes.
+      - name: CertOne confidential scan
+        uses: admin-certkorai/certone-action@v1
+        with:
+          api-key: ${{ secrets.CERTONE_API_KEY }}
+          path: ${{ matrix.path }}
+          asset: ${{ matrix.asset }}
+          country-code: EU
+          tee: amd_sev_snp
+          fail-on: high
+
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: certone-evidence-${{ matrix.path }}
+          path: |
+            certone-report.json
+            certone-attestation.json
+          if-no-files-found: ignore

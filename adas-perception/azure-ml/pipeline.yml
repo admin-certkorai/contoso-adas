@@ -1,0 +1,114 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+display_name: adas-perception-train-register
+description: >-
+  Prep -> train -> evaluate -> register pipeline for the ADAS forward-perception
+  detector, gated by a CertOne AI Act / SOTIF compliance check before the model
+  is promoted to the registry.
+experiment_name: adas-perception
+
+settings:
+  default_compute: azureml:cpu-cluster
+
+inputs:
+  certone_key_vault_url:
+    type: string
+    description: workspace Key Vault URL holding the CertOne API key (certone-api-key)
+  raw_dataset:
+    type: uri_folder
+    path: azureml:adas-road-frames:1
+  conf_threshold: 0.30
+
+outputs:
+  registered_model:
+    type: uri_folder
+
+jobs:
+  prep:
+    type: command
+    display_name: prep-frames
+    compute: azureml:cpu-cluster
+    environment: azureml:adas-onnx-cpu@latest
+    inputs:
+      raw: ${{parent.inputs.raw_dataset}}
+    outputs:
+      prepared:
+        type: uri_folder
+    code: ../src
+    command: >-
+      python prep.py --raw ${{inputs.raw}} --out ${{outputs.prepared}}
+      --resolution 416 --blur-faces --blur-plates
+
+  train:
+    type: command
+    display_name: train-detector
+    compute: azureml:cpu-cluster
+    environment: azureml:adas-onnx-cpu@latest
+    inputs:
+      data: ${{parent.jobs.prep.outputs.prepared}}
+    outputs:
+      model:
+        type: uri_folder
+    code: ../src
+    command: >-
+      python train.py --data ${{inputs.data}} --out ${{outputs.model}}
+      --arch tiny-yolov3 --export-onnx
+
+  evaluate:
+    type: command
+    display_name: evaluate-detector
+    compute: azureml:cpu-cluster
+    environment: azureml:adas-onnx-cpu@latest
+    inputs:
+      model: ${{parent.jobs.train.outputs.model}}
+      data: ${{parent.jobs.prep.outputs.prepared}}
+    outputs:
+      # eval-export folder — CertOne reads eval/detections_eval.csv from here to compute
+      # accuracy / AUROC (+ROC) / precision / recall / F1 + day-night fairness gaps.
+      eval:
+        type: uri_folder
+      metrics:
+        type: uri_folder
+    code: ..
+    command: >-
+      python src/evaluate.py &&
+      cp -r eval/. ${{outputs.eval}}/ &&
+      echo "published eval export: $(ls ${{outputs.eval}})"
+
+  compliance_gate:
+    type: command
+    display_name: certone-compliance-gate
+    compute: azureml:cpu-cluster
+    environment: azureml:adas-onnx-cpu@latest
+    inputs:
+      certone_key_vault_url: ${{parent.inputs.certone_key_vault_url}}
+      model: ${{parent.jobs.train.outputs.model}}
+      metrics: ${{parent.jobs.evaluate.outputs.metrics}}
+      eval: ${{parent.jobs.evaluate.outputs.eval}}   # eval-export CSV -> measured metrics
+    code: ..
+    # pipeline (blocking registration) if the verdict breaches high.
+    # Confidential scan on CertOne (the project runs in an attested TEE); the API key is read
+    # from the workspace Key Vault with the compute's managed identity. A non-zero exit
+    # blocks the steps that depend on this gate.
+    command: >-
+      mkdir -p eval && cp ${{inputs.eval}}/*.csv eval/ &&
+      pip install -q --disable-pip-version-check "certone-sdk[azure]" &&
+      certone-submit --project . --asset "ADAS Forward Perception" --environment ci --country-code EU
+      --tee amd_sev_snp --fail-on high
+      --api-key-vault "${{inputs.certone_key_vault_url}}/secrets/certone-api-key"
+      --report-out ./report.json --attestation-out ./attestation.json
+
+  register:
+    type: command
+    display_name: register-model
+    compute: azureml:cpu-cluster
+    environment: azureml:adas-onnx-cpu@latest
+    inputs:
+      model: ${{parent.jobs.train.outputs.model}}
+      gate: ${{parent.jobs.compliance_gate.outputs}}
+    outputs:
+      registered: ${{parent.outputs.registered_model}}
+    code: ../src
+    command: >-
+      python register.py --model ${{inputs.model}} --out ${{outputs.registered}}
+      --name adas-perception --tag tee=amd_sev_snp --tag risk=eu_high_risk

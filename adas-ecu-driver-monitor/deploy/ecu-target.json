@@ -1,0 +1,37 @@
+{
+  "_comment": "ECU deployment target descriptor for the DMS-1 driver-monitoring / forward-collision function. Describes the physical target the aarch64 firmware installs to and the phased OTA rollout plan the Uptane Director follows.",
+  "ecu": {
+    "ecuIdentifier": "DMS-1",
+    "role": "driver_monitoring_forward_collision",
+    "asil": "ASIL-B (function contributes to ASIL-D FCW arbitration)",
+    "hardware": {
+      "soc": "arm64 Cortex-A automotive SoC",
+      "arch": "aarch64",
+      "os": "embedded Linux (Yocto)",
+      "accelerator": "none (int8 MLP on CPU)"
+    },
+    "primary": false,
+    "directorConnected": true
+  },
+  "firmware": {
+    "artifact": "dms_infer_aarch64",
+    "modelVersion": "dms-mlp-v1.0.0",
+    "buildCommand": "make cross",
+    "entrypoint": "/opt/dms/dms_infer /var/dms/frame_features.csv",
+    "frameRateHz": 30
+  },
+  "rollout": {
+    "strategy": "phased",
+    "phases": [
+      { "name": "canary",       "fleetPercent": 1,   "soakHours": 72,  "abortOnDtc": true },
+      { "name": "staged",       "fleetPercent": 10,  "soakHours": 168, "abortOnDtc": true },
+      { "name": "fleet-wide",   "fleetPercent": 100, "soakHours": 0,   "abortOnDtc": true }
+    ],
+    "preconditions": [
+      "vehicle parked / ignition-off (no update while driving)",
+      "battery SoC >= 50%",
+      "CertOne release gate = pass"
+    ],
+    "rollback": "A/B partition; Director reverts to previous signed target on DTC or failed self-test"
+  }
+}

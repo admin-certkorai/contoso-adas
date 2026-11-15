@@ -1,0 +1,38 @@
+bom_id: bom-adas-perception-2026-0001
+snapshot_ref: snapshot://certkor/adas-perception/v1.0
+ai:
+  - match: models/tiny-yolov3-11.onnx
+    supplier_agent: perception-platform
+    package_version: "1.0.0"
+    model_type: tiny_yolov3_object_detector
+    application_domain: automotive/adas_perception
+    metrics_used: [accuracy, precision, recall, f1, auroc, map50, ece, brier, worst_group_accuracy, latency_ms]
+    metrics_decision_threshold: { map50: 0.33, recall_vru: 0.85, worst_group_accuracy: 0.80, latency_ms: 40 }
+    hyperparameters:
+      architecture: tiny-yolov3
+      input_resolution: "416x416"
+      classes: "coco-80 (deployed subset: person,bicycle,motorcycle,car,bus,truck,traffic light,stop sign)"
+      nms: in_graph
+    energy_consumption:
+      training: { value: 41.0, unit: kWh }
+      inference: { value: 0.9, unit: Wh }
+    explainability_models_used: []
+datasets:
+  - match: data/
+    source: fleet dashcam captures (registered OEM test fleet) + BDD100K-derived road frames
+    dataset_type: image
+    anonymization_method: face_and_license_plate_partial_blur
+    availability: registration
+    preprocessing_method: aspect-preserving letterbox to 416x416, RGB, scaled 0..1
+    known_bias: [daytime_skew, single_region_roads]
+    has_sensitive_pii: true
+    confidentiality_level: high
+software:
+  - match: "."
+    package_version: "1.0.0"
+    supplier_agent: perception-platform
+    coding_language_detected: python
+build:
+  build_type: container
+  runner_info: { executor: azure-ml, image: mcr.microsoft.com/azureml/onnxruntime:latest-cpu, state: success }
+  build_environment: { arch: amd64, tee: amd_sev_snp }

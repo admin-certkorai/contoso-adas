@@ -1,0 +1,21 @@
+# Forward-perception ECU runtime configuration (SAE L2+ driver assistance).
+# Flashed onto the target ECU alongside the IoT Edge deployment manifest.
+ecu:
+  hardware: nvidia-orin-adas-devkit
+  tee: amd_sev_snp
+  camera:
+    device: /dev/video-front
+    fps: 30
+    resolution: "1920x1080"
+  perception:
+    model: /opt/perception/models/tiny-yolov3-11.onnx
+    input_resolution: "416x416"
+    conf_threshold: 0.30
+    fcw_classes: [person, bicycle, motorcycle, car, bus, truck]
+
+telemetry:
+  # Fleet backend that ingests SOTIF triggering-condition telemetry.
+  endpoint: https://fleet-ingest.certkor-adas.example.com/v2/telemetry
+  # Fleet-provisioning token used to enrol this ECU with the OEM cloud on boot.
+  fleet_provisioning_token: "fpt_live_9c1f4e2a7b6d40518e3a2f0c9d7e1b64"
+  upload_interval_s: 60

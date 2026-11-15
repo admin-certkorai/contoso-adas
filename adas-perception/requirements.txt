@@ -1,0 +1,5 @@
+# ADAS forward-perception — lightweight CPU inference runtime only.
+# No torch / ultralytics: the detector ships as a frozen ONNX graph.
+onnxruntime==1.23.2
+numpy==1.23.3
+pillow==12.3.0
