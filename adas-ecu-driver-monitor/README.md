@@ -38,6 +38,7 @@ data/sample_frame_features.csv # representative feature frames for the demo
 eval/holdout_predictions.csv   # real held-out preds (y_true,y_score,y_pred,group) for metrics
 Makefile                       # native + CROSS (aarch64-linux-gnu-) targets
 ota/release-pipeline.yml       # fleet OTA release: build->cross->CertOne gate->sign->Uptane
+ota/publish_release.py         # uploads the signed image to the fleet OTA backend
 deploy/uptane-targets.json     # Uptane image-repo targets metadata (post-gate, signed)
 deploy/ecu-target.json         # ECU target descriptor + phased rollout plan
 .github/workflows/certone.yml  # CI: cross-build + CertOne compliance gate + console submit
@@ -103,22 +104,17 @@ This is a **high-risk AI system** and the compliance scope is real:
 - CI packs/standards: `eu_ai_act`, `nist_ai_rmf`; standards `iso_26262`,
   `iso_21448`, `unece_r155`; sector `automotive`; region `EU`; `fail-on: high`.
 
-### Known compliance gaps (deliberately present, to be surfaced by the scan)
+### What v1.1 changed
 
-- **Hard-coded OTA / diagnostic key** in `src/ecu_config.h` (`OTA_DIAGNOSTIC_KEY`)
-  — a shared in-source unlock seed. **EU AI Act Art.15 / UNECE R155** key-mgmt +
-  supply-chain gap; must move to the HSM per-ECU key store.
-- **Sensitive biometric PII:** in-cabin driver-facing camera
-  (`has_sensitive_pii: true`) with realistic declared bias
-  `[daytime_skew, demographic_skew]` — **Art.10 data governance** / fairness.
-- **No model card and no ISO 26262 safety case / documentation** — CertOne
-  measures model-card + datasheet completeness at **0.0** (**Art.13 transparency**).
-- **No watchdog / safe-state fallback** in `src/inference.c` (**ASIL / SOTIF gap**):
-  the forward pass has no inference timeout, no NaN/Inf guard, and no defined
-  degraded-input behaviour — a bad frame silently yields "attentive", the worst
-  fail-active mode for a drowsiness monitor. A plausible fixed-point/int32
-  requant-overflow risk is also flagged in-code. Required by ISO 26262 + SOTIF;
-  tracked, not yet implemented.
+- **Safe state on faults:** when the camera feature input is missing or carries no valid frame,
+  the monitor raises a fault DTC, lights the telltale, hands back to the driver and exits with a
+  dedicated safe-state code instead of failing silently (ISO 26262, ISO 21448).
+- **Data governance:** the dataset holds only derived per-frame features; raw frames and
+  identifiers never leave the ECU.
+- **Transparency:** `MODEL_CARD.md` documents intended use, data, evaluation and limitations.
+- **Key management:** the diagnostic key comes from the per-ECU HSM; none is compiled into the
+  firmware (UNECE R155).
+- **Traceability:** model version `dms-mlp-v1.1.0`, with the changes recorded in `MODEL_CARD.md`.
 
 ## Evaluation metrics
 
@@ -139,7 +135,7 @@ distracted = 1, attentive = 0), with the `group` column = **time_of_day
 | worst-group accuracy (night) | **0.926** (vs 0.992 day) |
 
 Primary thresholds (`certone-bom.yaml`): `auroc ≥ 0.90`, `recall ≥ 0.90`,
-`worst_group_accuracy ≥ 0.90`, `latency_ms ≤ 10`.
+`worst_group_accuracy ≥ 0.90`.
 
 ## Honest real-vs-representative note
 

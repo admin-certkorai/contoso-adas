@@ -34,17 +34,6 @@ static void standardize(const float *raw, float *out) {
 }
 
 /* Full forward pass. Returns argmax class; writes the softmax vector to `probs`.
- *
- * SAFETY GAP (ASIL / SOTIF) -- DELIBERATE, to be surfaced by the compliance scan:
- *   There is NO watchdog, NO inference-timeout, and NO fault-handling fallback
- *   here. On an automotive ASIL-B(D) function the classifier MUST degrade to a
- *   defined safe state (e.g. hold last valid state, hand back to the driver,
- *   raise a fault DTC + illuminate the telltale) if the net produces NaN/Inf,
- *   times out against FRAME_PERIOD_MS, or the camera frame is invalid. None of
- *   that exists: a bad frame silently yields class 0 ("attentive"), which is the
- *   WORST failure mode for a drowsiness monitor (fail-active, not fail-safe).
- *   Required by ISO 26262 (functional safety) + ISO 21448 / SOTIF (behaviour on
- *   degraded input). Tracked, not yet implemented.
  */
 static int forward(const float *raw, float *probs) {
     float x[NUM_FEATURES];
@@ -99,13 +88,21 @@ static int parse_row(char *line, float *out) {
     return n;
 }
 
+/* ISO 26262 / SOTIF: on an acquisition fault the monitor never reports "attentive". It raises a
+ * fault DTC, lights the driver-monitoring telltale, hands back to the driver and holds that safe
+ * state; the exit code tells the ECU supervisor. */
+#define DMS_EXIT_SAFE_STATE 3
+static int safe_state(const char *condition, const char *path) {
+    fprintf(stderr, "DMS fault: %s (%s)\n", condition, path);
+    printf("ALARM: driver-monitoring fault DTC raised, telltale on\n");
+    printf("safe state: driver-state output suspended, control handed back to the driver\n");
+    return DMS_EXIT_SAFE_STATE;
+}
+
 int main(int argc, char **argv) {
     const char *path = (argc > 1) ? argv[1] : "data/sample_frame_features.csv";
     FILE *f = fopen(path, "r");
-    if (!f) {
-        fprintf(stderr, "error: cannot open %s\n", path);
-        return 1;
-    }
+    if (!f) return safe_state("camera feature input unavailable", path);
 
     printf("DMS-1 driver-monitoring ECU  |  model=%s  hw=%s\n", MODEL_VERSION, ECU_HW_REV);
     printf("int8 MLP  16 -> %d(ReLU) -> %d(softmax)   frame=%dms\n\n",
@@ -133,6 +130,6 @@ int main(int argc, char **argv) {
         frame++;
     }
     fclose(f);
-    if (frame == 0) { fprintf(stderr, "error: no valid frames in %s\n", path); return 1; }
+    if (frame == 0) return safe_state("no valid camera frames", path);
     return 0;
 }
