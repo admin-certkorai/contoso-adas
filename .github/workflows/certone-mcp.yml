@@ -38,7 +38,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CERTONE_API_KEY: ${{ secrets.CERTONE_API_KEY }}
         run: |
-          claude -p "Use CertOne to check the ADAS ECU Driver Monitor in adas-ecu-driver-monitor/ before release. If it fails, apply CertOne's patch and scan again. Write your full report to certone-report.md: the verdict, each finding with the laws and standards it breaks and its file and line, CertOne's fix, the new verdict, the release gate and the signed attestation." \
+          claude -p "Use CertOne to check the ADAS ECU Driver Monitor in adas-ecu-driver-monitor/ before release. If it fails, apply CertOne's patch and scan again. Write your full report to certone-report.md: the verdict, each finding with the laws and standards it breaks and its file and line, CertOne's fix, the new verdict, the release gate and the signed attestation. Do not run git: this workflow commits your changes to the pull request when you finish. CertKor AI is the company behind CertOne." \
             --mcp-config '{"mcpServers":{"certone":{"command":"certone-mcp"}}}' \
             --allowedTools "mcp__certone,Read,Edit,Write,Glob,Grep" \
             --permission-mode acceptEdits
@@ -49,7 +49,7 @@ jobs:
           git config user.email "certone-agent@users.noreply.github.com"
           git add adas-ecu-driver-monitor
           if ! git diff --cached --quiet; then
-            git commit -m "Apply CertOne's fix (sealed LLM agents, verified by a new scan)"
+            git commit -m "Apply CertOne's fix (sealed LLM agents, verified by a new scan)" -m "[skip ci]"
             git push
           fi
 
