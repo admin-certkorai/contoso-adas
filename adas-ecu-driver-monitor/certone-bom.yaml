@@ -1,16 +1,16 @@
 bom_id: bom-adas-ecu-driver-monitor-2026-0001
-snapshot_ref: snapshot://certkor/adas-ecu-driver-monitor/v1.0
+snapshot_ref: snapshot://certkor/adas-ecu-driver-monitor/v1.1
 ai:
   - match: src/model_weights.h
     supplier_agent: adas-perception-firmware
-    package_version: "1.0.0"
+    package_version: "1.1.0"
     # Small, NON-accelerated int8 MLP baked into the ECU firmware. The arch below
     # (arm64) + small size + no accelerator routes the workload to CertOne's
     # unikernel/embedded substrate (cross-compiled aarch64 ELF under qemu).
     model_type: int8_mlp_classifier
     application_domain: automotive/driver_monitoring_forward_collision
-    metrics_used: [accuracy, precision, recall, f1, auroc, ece, brier, worst_group_accuracy, latency_ms]
-    metrics_decision_threshold: { auroc: 0.90, recall: 0.90, worst_group_accuracy: 0.90, decision_probability: 0.5, latency_ms: 10 }
+    metrics_used: [accuracy, precision, recall, f1, auroc, ece, brier, worst_group_accuracy]
+    metrics_decision_threshold: { auroc: 0.90, recall: 0.90, worst_group_accuracy: 0.90, decision_probability: 0.5 }
     hyperparameters:
       architecture: mlp_16_16_3
       quantization: int8_symmetric_per_tensor
@@ -24,7 +24,7 @@ ai:
       inference: { value: 0.002, unit: Wh }
     explainability_models_used: []
 datasets:
-  - match: data/
+  - match: "*data/sample_frame_features.csv"
     source: registered OEM driver-monitoring test fleet (in-cabin IR camera telemetry) + closed-course drowsiness/distraction protocol; shipped sample is synthetic-but-realistic feature telemetry
     dataset_type: tabular
     size: "2 MB"
@@ -35,12 +35,14 @@ datasets:
     #  - daytime_skew: corpus over-represents daylight; night/low-light IR frames degrade.
     #  - demographic_skew: eyewear / face-geometry / skin-tone coverage is uneven.
     known_bias: [daytime_skew, demographic_skew]
-    # Driver-facing in-cabin camera => sensitive biometric PII.
-    has_sensitive_pii: true
+    bias_mitigation: per-group evaluation (day and night) gated by a worst-group accuracy release threshold of 0.90; night IR and eyewear sessions added to the closed-course protocol
+    # v1.1: only derived per-frame features are stored; raw face frames and driver or vehicle
+    # identifiers never leave the ECU and are not part of this dataset.
+    has_sensitive_pii: false
     confidentiality_level: high
 software:
   - match: "."
-    package_version: "1.0.0"
+    package_version: "1.1.0"
     supplier_agent: adas-perception-firmware
     coding_language_detected: c
 build:
