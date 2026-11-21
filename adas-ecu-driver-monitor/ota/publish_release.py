@@ -14,12 +14,13 @@ import json
 import sys
 import urllib.request
 from pathlib import Path
+import os
 
 OTA_BACKEND = "https://ota.fleet.internal/api/v2"
 ECU_ID = "DMS-1"
 
 # OTA backend credential.
-OTA_API_KEY = "ck_live_4f2a9c7e1b3d58a06e9f2c1d7b4a3e05"
+OTA_API_KEY = os.environ.get("OTA_API_KEY", "")  # set from the secret store at deployment
 
 
 def manifest(image: Path, campaign: str) -> dict[str, object]:
