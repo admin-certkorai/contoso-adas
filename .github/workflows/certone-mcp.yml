@@ -1,0 +1,59 @@
+name: CertOne AI agent (MCP)
+
+# On every pull request, an AI agent (Claude Code) certifies the change through the CertOne MCP
+# server: a confidential scan, CertOne's sealed LLM fix applied and committed to the branch, a new
+# scan, the release gate and the signed attestation, reported as a comment on the pull request.
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ["adas-ecu-driver-monitor/**"]
+
+permissions:
+  contents: write        # commit CertOne's fix to the pull request branch
+  pull-requests: write   # post the report
+
+jobs:
+  certone-agent:
+    # Branches of this repository only: forks never run the agent or reach the secrets.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Claude Code and the CertOne MCP server
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          pip install "certone-sdk[mcp]"
+
+      - name: Certify the AI system with CertOne
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CERTONE_API_KEY: ${{ secrets.CERTONE_API_KEY }}
+        run: |
+          claude -p "Use CertOne to check the ADAS ECU Driver Monitor in adas-ecu-driver-monitor/ before release. If it fails, apply CertOne's patch and scan again. Write your full report to certone-report.md: the verdict, each finding with the laws and standards it breaks and its file and line, CertOne's fix, the new verdict, the release gate and the signed attestation." \
+            --mcp-config '{"mcpServers":{"certone":{"command":"certone-mcp"}}}' \
+            --allowedTools "mcp__certone,Read,Edit,Write,Glob,Grep" \
+            --permission-mode acceptEdits
+
+      - name: Commit CertOne's fix to the pull request
+        run: |
+          git config user.name "certone-agent"
+          git config user.email "certone-agent@users.noreply.github.com"
+          git add adas-ecu-driver-monitor
+          if ! git diff --cached --quiet; then
+            git commit -m "Apply CertOne's fix (sealed LLM agents, verified by a new scan)"
+            git push
+          fi
+
+      - name: Post the CertOne report on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment ${{ github.event.pull_request.number }} --body-file certone-report.md
